@@ -5,8 +5,8 @@ We  want a REST-API method to meet new friends but block annoying people. <br/>
 
 The HTTP method is GET /hello/<name> and it will have three types of responses:
 - If the person calls the REST-API method for the first time, then the REST-API will respond "Hello, nice to meet you <name>"
-- If the person calls the REST-API method for the second time, but after 60 seconds, then the  method will respond "Hello my friend"
-- If the person calls the REST-API method repeatedly without waiting 60 seconds, then the method  will respond with "Get away from me"
+- If the person calls the REST-API method for the second time, but after 60 seconds, then the method will respond with "Hello my friend"
+- If the person calls the REST-API method repeatedly without waiting 60 seconds, then the method will respond with "Get away from me"
 ## Download libraries
 ```bash
 git clone https://github.com/laytan/odin-http
