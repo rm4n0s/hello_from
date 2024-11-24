@@ -2,8 +2,8 @@ package main
 
 import "core:fmt"
 import "core:mem/virtual"
+import "core:sync"
 import "core:time"
-
 
 Verify_Name_Error :: enum {
 	None,
@@ -41,8 +41,10 @@ Hello_From_Error :: union #shared_nil {
 }
 
 Storage :: struct {
-	friends:  map[string]time.Time,
-	spammers: map[string]int,
+	friends:          map[string]time.Time,
+	spammers:         map[string]int,
+	friends_rwmutex:  ^sync.RW_Mutex,
+	spammers_rwmutex: ^sync.RW_Mutex,
 }
 
 Options :: struct {
@@ -58,12 +60,16 @@ storage_init :: proc(allocator := context.allocator) -> ^Storage {
 	storage := new(Storage)
 	storage.friends = make(map[string]time.Time)
 	storage.spammers = make(map[string]int)
+	storage.friends_rwmutex = new(sync.RW_Mutex)
+	storage.spammers_rwmutex = new(sync.RW_Mutex)
 	return storage
 }
 
 
 storage_destroy :: proc(storage: ^Storage, allocator := context.allocator) {
 	context.allocator = allocator
+	free(storage.friends_rwmutex)
+	free(storage.spammers_rwmutex)
 	delete_map(storage.friends)
 	delete_map(storage.spammers)
 	free(storage)
@@ -156,7 +162,9 @@ verify_friend :: proc(storage: ^Storage, opts: Options, name: string) -> Verify_
 
 
 check_name :: proc(storage: ^Storage, opts: Options, name: string) -> Check_Name_Error {
+	sync.rw_mutex_shared_lock(storage.friends_rwmutex)
 	friend, isFriend := storage.friends[name]
+	sync.rw_mutex_shared_unlock(storage.friends_rwmutex)
 	if isFriend {
 		nw := time.now()
 		dur := time.diff(friend, nw)
@@ -166,7 +174,9 @@ check_name :: proc(storage: ^Storage, opts: Options, name: string) -> Check_Name
 		return .None
 	}
 
+	sync.rw_mutex_shared_lock(storage.spammers_rwmutex)
 	spammer, isSpammer := storage.spammers[name]
+	sync.rw_mutex_shared_unlock(storage.spammers_rwmutex)
 	if isSpammer {
 		return .Spammer
 	}
@@ -179,6 +189,9 @@ check_name :: proc(storage: ^Storage, opts: Options, name: string) -> Check_Name
 }
 
 add_friend :: proc(storage: ^Storage, opts: Options, name: string) -> Add_Friend_Error {
+	sync.rw_mutex_lock(storage.friends_rwmutex)
+	defer sync.rw_mutex_unlock(storage.friends_rwmutex)
+
 	if len(storage.friends) < opts.friends_len {
 		storage.friends[name] = time.now()
 		return .None
@@ -188,6 +201,8 @@ add_friend :: proc(storage: ^Storage, opts: Options, name: string) -> Add_Friend
 
 
 add_spammer :: proc(storage: ^Storage, opts: Options, name: string) -> Add_Spammer_Error {
+	sync.rw_mutex_lock(storage.spammers_rwmutex)
+	defer sync.rw_mutex_unlock(storage.spammers_rwmutex)
 	if len(storage.spammers) < opts.spammers_len {
 		storage.spammers[name] = 1
 		return .None
@@ -196,6 +211,8 @@ add_spammer :: proc(storage: ^Storage, opts: Options, name: string) -> Add_Spamm
 }
 
 update_friend :: proc(storage: ^Storage, name: string) {
+	sync.rw_mutex_lock(storage.friends_rwmutex)
+	defer sync.rw_mutex_unlock(storage.friends_rwmutex)
 	friend, isFriend := &storage.friends[name]
 	if isFriend {
 		friend^ = time.now()
@@ -204,6 +221,8 @@ update_friend :: proc(storage: ^Storage, name: string) {
 
 
 update_spammer :: proc(storage: ^Storage, name: string) {
+	sync.rw_mutex_lock(storage.spammers_rwmutex)
+	defer sync.rw_mutex_unlock(storage.spammers_rwmutex)
 	spammer, isSpammer := &storage.spammers[name]
 	if isSpammer {
 		spammer^ += 1
@@ -211,6 +230,8 @@ update_spammer :: proc(storage: ^Storage, name: string) {
 }
 
 remove_friend :: proc(storage: ^Storage, name: string) {
+	sync.rw_mutex_lock(storage.friends_rwmutex)
+	defer sync.rw_mutex_unlock(storage.friends_rwmutex)
 	_, isFriend := storage.friends[name]
 	if isFriend {
 		delete_key(&storage.friends, name)
